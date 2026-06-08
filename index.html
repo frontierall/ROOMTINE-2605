@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ROOMTINE — 루틴이 쌓이면, 방이 완성된다</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Font Awesome for Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Google Fonts: Playfair Display for Serifs, Pretendard fallback -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+  
+  <style>
+    body {
+      font-family: 'Noto Sans KR', sans-serif;
+      background-color: #FDFBF7;
+      color: #3D3530;
+    }
+    
+    .serif-title {
+      font-family: 'DM Serif Display', 'Playfair Display', serif;
+    }
+
+    /* 룸타인 브랜드 컬러 시스템 */
+    :root {
+      --warm-ivory: #F5EFE0;
+      --sage-green: #8BAF8E;
+      --terracotta: #C97B5A;
+      --dusty-lavender: #B8A9C9;
+      --warm-charcoal: #3D3530;
+    }
+
+    .bg-warm-ivory { background-color: var(--warm-ivory); }
+    .bg-sage-green { background-color: var(--sage-green); }
+    .bg-terracotta { background-color: var(--terracotta); }
+    .bg-dusty-lavender { background-color: var(--dusty-lavender); }
+    .text-warm-charcoal { color: var(--warm-charcoal); }
+    .border-warm-ivory { border-color: var(--warm-ivory); }
+
+    /* 아이소메트릭 그리드 및 방꾸미기 영역 최적화 */
+    .room-canvas {
+      perspective: 1000px;
+      background: radial-gradient(circle at center, #FDFBEE 0%, #EAE3D2 100%);
+      position: relative;
+      overflow: hidden;
+      transition: background 0.8s ease, filter 0.8s ease;
+    }
+
+    /* 시간대별 필터 효과 */
+    .room-canvas.morning {
+      background: radial-gradient(circle at center, #FFFDF0 0%, #F5EAD2 100%);
+      filter: saturate(1.1) brightness(1.05);
+    }
+    .room-canvas.afternoon {
+      background: radial-gradient(circle at center, #FFF9E6 0%, #EAD5B3 100%);
+      filter: saturate(1.2) brightness(1.0);
+    }
+    .room-canvas.evening {
+      background: radial-gradient(circle at center, #F7D6C8 0%, #D49B83 100%);
+      filter: saturate(1.1) sepia(0.2) brightness(0.9);
+    }
+    .room-canvas.night {
+      background: radial-gradient(circle at center, #2C3550 0%, #151B2E 100%);
+      filter: saturate(0.8) brightness(0.7) contrast(1.1);
+    }
+
+    /* 방 3D 바닥면 효과 */
+    .isometric-floor {
+      width: 320px;
+      height: 180px;
+      background-color: #E2D7C2;
+      transform: rotateX(60deg) rotateZ(-45deg);
+      transform-style: preserve-3d;
+      box-shadow: -15px 15px 40px rgba(0,0,0,0.15);
+      position: relative;
+      border: 6px solid #D2C4AE;
+      transition: all 0.5s ease;
+    }
+    
+    .room-canvas.night .isometric-floor {
+      background-color: #4C556D;
+      border-color: #3C4459;
+    }
+
+    /* 드래그 앤 드롭 아이템 스타일 */
+    .placed-item {
+      position: absolute;
+      cursor: grab;
+      user-select: none;
+      transform: translate(-50%, -50%);
+      transition: filter 0.3s ease;
+      z-index: 10;
+    }
+    .placed-item:active {
+      cursor: grabbing;
+      filter: drop-shadow(0 10px 10px rgba(0,0,0,0.3));
+    }
+
+    /* 어지럽혀진 정도 (더러움) 오버레이 */
+    .mess-overlay {
+      pointer-events: none;
+      mix-blend-mode: multiply;
+      opacity: 0;
+      transition: opacity 1s ease;
+    }
+
+    /* 스크롤바 디자인 변경 */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #F5EFE0;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #C97B5A;
+      border-radius: 3px;
+    }
+
+    /* 반짝이는 이펙트 애니메이션 */
+    @keyframes sparkle {
+      0%, 100% { transform: scale(0) rotate(0deg); opacity: 0; }
+      50% { transform: scale(1.2) rotate(180deg); opacity: 1; }
+    }
+    .sparkle-effect {
+      animation: sparkle 0.8s ease-out forwards;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-[#C97B5A] selection:text-white">
+
+  <!-- HEADER -->
+  <header class="border-b border-stone-200 bg-white/80 backdrop-blur sticky top-0 z-40 px-4 py-3">
+    <div class="max-w-7xl mx-auto flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <!-- 앱 로고 -->
+        <div class="w-10 h-10 bg-[#C97B5A] rounded-xl flex items-center justify-center text-white shadow-md shadow-[#C97B5A]/20">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+          </svg>
+        </div>
+        <div>
+          <span class="serif-title text-xl font-bold tracking-tight text-stone-800">ROOMTINE</span>
+          <span class="text-xs block text-stone-400 font-medium tracking-widest -mt-1">루틴이 쌓이면, 방이 완성된다</span>
+        </div>
+      </div>
+
+      <!-- 상단 현황 정보 -->
+      <div class="flex items-center space-x-4">
+        <!-- 코지 코인 -->
+        <div class="bg-[#F5EFE0] px-3.5 py-1.5 rounded-full flex items-center space-x-2 border border-[#E8DFC8]">
+          <i class="fa-solid fa-coins text-amber-500 text-sm animate-bounce"></i>
+          <span class="font-bold text-stone-700 text-sm" id="coin-count">100</span>
+          <span class="text-[10px] text-stone-400 font-bold uppercase">Cozy Coin</span>
+        </div>
+
+        <!-- 연속 달성 일수 (Streak) -->
+        <div class="bg-orange-50 px-3.5 py-1.5 rounded-full flex items-center space-x-2 border border-orange-100">
+          <span class="text-orange-500 text-sm">🔥</span>
+          <span class="font-bold text-orange-600 text-sm" id="streak-count">3일 연속</span>
+        </div>
+
+        <!-- 방 상태 척도 -->
+        <div class="hidden md:flex items-center space-x-2 bg-stone-100 px-3 py-1.5 rounded-full text-xs">
+          <span id="room-cleanliness-icon">✨</span>
+          <span class="font-medium text-stone-600">청결도: <strong id="room-cleanliness-txt" class="text-emerald-600">쾌적함 (100%)</strong></span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-6">
+    
+    <!-- LEFT COLUMN (4 COLS): ROUTINE MANAGER -->
+    <section class="lg:col-span-5 flex flex-col space-y-5">
+      
+      <!-- 루틴 입력 폼 -->
+      <div class="bg-white p-5 rounded-2xl shadow-sm border border-stone-100">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-base font-bold text-stone-800 flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-[#C97B5A]"></span>
+            오늘의 루틴 심기
+          </h2>
+          <span class="text-xs text-[#C97B5A] bg-[#C97B5A]/10 px-2 py-0.5 rounded font-semibold">가구 잠금해제 열쇠</span>
+        </div>
+        
+        <form id="routine-form" class="space-y-3">
+          <div>
+            <label class="block text-xs font-bold text-stone-500 mb-1">어떤 루틴을 수행하시겠어요?</label>
+            <input type="text" id="routine-title" placeholder="예: 아침 30분 요가하기, 방 대청소하기" required
+              class="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C97B5A]/20 focus:border-[#C97B5A] transition">
+          </div>
+          
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold text-stone-500 mb-1">카테고리</label>
+              <select id="routine-category" class="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:outline-none">
+                <option value="exercise" data-icon="🏃">🏃 운동</option>
+                <option value="sleep" data-icon="🌙">🌙 수면</option>
+                <option value="diet" data-icon="🍎">🍎 식습관</option>
+                <option value="study" data-icon="📚">📚 공부/성장</option>
+                <option value="mind" data-icon="🧘">🧘 마음챙김</option>
+                <option value="hobby" data-icon="🎨">🎨 취미</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-stone-500 mb-1">반복 설정</label>
+              <select id="routine-period" class="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:outline-none">
+                <option value="매일">🔄 매일</option>
+                <option value="주 3회">📅 주 3회</option>
+                <option value="평일">💼 평일만</option>
+                <option value="주말">⛺ 주말만</option>
+              </select>
+            </div>
+          </div>
+
+          <button type="submit" class="w-full bg-[#C97B5A] hover:bg-[#b5694a] text-white py-3 rounded-xl text-sm font-bold shadow-md shadow-[#C97B5A]/10 transition flex items-center justify-center gap-2">
+            <i class="fa-solid fa-plus text-xs"></i> 루틴 추가하고 방 꾸밀 준비하기
+          </button>
+        </form>
+      </div>
+
+      <!-- 오늘의 루틴 목록 -->
+      <div class="bg-white p-5 rounded-2xl shadow-sm border border-stone-100 flex-1 flex flex-col">
+        <div class="flex justify-between items-center mb-4">
+          <div>
+            <h2 class="text-base font-bold text-stone-800">오늘의 루틴 현황</h2>
+            <p class="text-xs text-stone-400 mt-0.5">체크하여 코인 및 특별 가구를 잠금 해제하세요!</p>
+          </div>
+          <button onclick="resetAllRoutines()" class="text-xs text-stone-400 hover:text-stone-600 transition flex items-center gap-1">
+            <i class="fa-solid fa-rotate"></i> 초기화
+          </button>
+        </div>
+
+        <!-- 진행도 바 -->
+        <div class="mb-4 bg-stone-100 rounded-full h-2.5 overflow-hidden">
+          <div id="routine-progress-bar" class="bg-[#8BAF8E] h-full rounded-full transition-all duration-500" style="width: 40%;"></div>
+        </div>
+        <div class="flex justify-between text-[11px] text-stone-500 font-medium mb-4">
+          <span id="progress-text">완료율 40%</span>
+          <span class="text-[#8BAF8E] font-bold">+ 오늘 코인 보너스 대기중</span>
+        </div>
+
+        <!-- 루틴 카드 목록 -->
+        <div class="space-y-3 flex-1 overflow-y-auto max-h-[350px] pr-1" id="routine-list-container">
+          <!-- JS에서 동적 생성됨 -->
+        </div>
+
+        <!-- 감성 문구 영역 (브랜드 보이스) -->
+        <div class="mt-4 bg-[#F5EFE0]/40 border border-[#F5EFE0] p-3.5 rounded-xl text-xs text-stone-600 flex items-start gap-2.5">
+          <span class="text-base">🏠</span>
+          <div class="leading-relaxed" id="brand-voice-box">
+            "오늘도 잘하고 있어요! 루틴을 지키면 방안에 작은 햇살이 비추기 시작할 거예요."
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT COLUMN (7 COLS): INTERACTIVE ROOM & SHOP -->
+    <section class="lg:col-span-7 flex flex-col space-y-5">
+      
+      <!-- ROOM VIEWPORT -->
+      <div class="bg-white p-4 rounded-2xl shadow-sm border border-stone-100 flex flex-col">
+        
+        <!-- 컨트롤러 헤더 -->
+        <div class="flex justify-between items-center mb-3">
+          <div class="flex items-center space-x-2">
+            <span class="w-3 h-3 rounded-full bg-[#8BAF8E]"></span>
+            <h2 class="text-base font-bold text-stone-800" id="room-title">나의 아늑한 원룸</h2>
+            <span class="text-[10px] bg-stone-100 text-stone-500 font-semibold px-2 py-0.5 rounded" id="item-count-badge">가구 0개 설치됨</span>
+          </div>
+          
+          <!-- 조명/시간 변경 컨트롤 -->
+          <div class="flex items-center bg-stone-100 p-1 rounded-lg text-xs font-semibold">
+            <button onclick="changeTime('morning')" class="time-btn px-2 py-1 rounded text-stone-600 bg-white shadow-sm" data-time="morning">☀️ 아침</button>
+            <button onclick="changeTime('afternoon')" class="time-btn px-2 py-1 rounded text-stone-500" data-time="afternoon">🌤️ 낮</button>
+            <button onclick="changeTime('evening')" class="time-btn px-2 py-1 rounded text-stone-500" data-time="evening">🌅 저녁</button>
+            <button onclick="changeTime('night')" class="time-btn px-2 py-1 rounded text-stone-500" data-time="night">🌙 밤</button>
+          </div>
+        </div>
+
+        <!-- 메인 시각적 룸 캔버스 영역 -->
+        <div id="room-canvas" class="room-canvas morning w-full h-[380px] rounded-xl flex items-center justify-center relative select-none">
+          
+          <!-- 방 내부 벽지/바닥 가이드 가상 아웃라인 -->
+          <div class="absolute inset-0 border-[12px] border-white/10 pointer-events-none rounded-xl"></div>
+          
+          <!-- 어질러진 오버레이 (방 상태에 따라 먼지, 종이뭉치 등이 나타나는 필터) -->
+          <div id="room-mess-dust" class="mess-overlay absolute inset-0 bg-contain bg-center bg-no-repeat transition-all duration-1000" 
+               style="background-image: url('data:image/svg+xml;utf8,<svg xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;100&quot; height=&quot;100&quot; viewBox=&quot;0 0 100 100&quot;><circle cx=&quot;15&quot; cy=&quot;20&quot; r=&quot;1&quot; fill=&quot;%238c7b6e&quot; opacity=&quot;0.5&quot;/><circle cx=&quot;85&quot; cy=&quot;15&quot; r=&quot;1.5&quot; fill=&quot;%238c7b6e&quot; opacity=&quot;0.4&quot;/><rect x=&quot;25&quot; y=&quot;75&quot; width=&quot;4&quot; height=&quot;4&quot; fill=&quot;%238c7b6e&quot; opacity=&quot;0.3&quot; transform=&quot;rotate(45)&quot;/></svg>'); opacity: 0;">
+          </div>
+          
+          <!-- 어질러졌을 때 나타나는 흩어진 쓰레기/구겨진 휴지 그래픽 (어지러움 상태 시각화용) -->
+          <div id="messy-assets" class="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-500">
+            <!-- 흩어진 양말 -->
+            <span class="absolute text-xl" style="bottom: 10%; left: 30%;">🧦</span>
+            <!-- 구겨진 종이 -->
+            <span class="absolute text-sm" style="bottom: 15%; right: 25%; transform: rotate(40deg);">📄</span>
+            <!-- 떨어진 먼지 -->
+            <span class="absolute text-xs" style="bottom: 25%; left: 15%;">💨</span>
+            <span class="absolute text-xs" style="top: 30%; right: 15%;">💨</span>
+          </div>
+
+          <!-- 아이소메트릭 룸 입체 바닥판 -->
+          <div class="isometric-floor flex items-center justify-center">
+            <!-- 바닥 타일 가이드 라인 (감성 데코레이션) -->
+            <div class="absolute inset-0" style="background-image: radial-gradient(#ffffff 1px, transparent 1px); background-size: 20px 20px; opacity: 0.3;"></div>
+            
+            <!-- 입체감을 더해주는 벽 코너선 -->
+            <div class="absolute top-0 left-0 w-full h-[3px] bg-white/20 origin-top-left" style="transform: rotate(45deg);"></div>
+          </div>
+
+          <!-- 아이템 배치 공간 (가상의 절대 위치 좌표계) -->
+          <div id="placed-items-container" class="absolute inset-0">
+            <!-- 배치된 가구 가전이 드롭 형태로 쌓임 -->
+          </div>
+
+          <!-- 최초 가이드 말풍선 -->
+          <div id="tutorial-bubble" class="absolute bottom-5 left-1/2 transform -translate-x-1/2 bg-stone-900/80 text-white text-[11px] px-3.5 py-2 rounded-full flex items-center space-x-2 backdrop-blur-sm pointer-events-none transition duration-500">
+            <span>✨ 아래 상점에서 가구를 획득해 드래그해 방에 놓아주세요!</span>
+          </div>
+        </div>
+
+        <!-- 캔버스 조작 도구 -->
+        <div class="mt-3 flex justify-between items-center text-xs text-stone-500 px-1">
+          <span class="flex items-center gap-1 text-amber-600 font-semibold" id="cleanliness-status-alert">
+            <i class="fa-solid fa-circle-check"></i> 방이 완벽하게 정리되었습니다!
+          </span>
+          <div class="flex space-x-2">
+            <button onclick="clearRoom()" class="px-2.5 py-1 bg-stone-100 hover:bg-stone-200 text-stone-600 rounded transition font-medium flex items-center gap-1">
+              <i class="fa-solid fa-trash-can text-[10px]"></i> 가구 전체 비우기
+            </button>
+            <button onclick="captureRoom()" class="px-2.5 py-1 bg-[#8BAF8E] hover:bg-[#789e7b] text-white rounded transition font-medium flex items-center gap-1">
+              <i class="fa-solid fa-share-nodes text-[10px]"></i> SNS 카드 저장
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- FURNITURE / DECORATION SHOP (가구점) -->
+      <div class="bg-white p-5 rounded-2xl shadow-sm border border-stone-100 flex-1">
+        <div class="flex flex-col md:flex-row md:justify-between md:items-center gap-2 mb-4">
+          <div>
+            <h2 class="text-base font-bold text-stone-800 flex items-center gap-2">
+              <i class="fa-solid fa-store text-stone-400 text-sm"></i>
+              코지 가구 소품샵
+            </h2>
+            <p class="text-xs text-stone-400 mt-0.5">루틴 달성으로 모은 Cozy Coin으로 방을 더 채워보세요</p>
+          </div>
+
+          <!-- 카테고리 탭 -->
+          <div class="flex space-x-1 bg-stone-100 p-1 rounded-xl text-xs font-semibold overflow-x-auto">
+            <button onclick="filterShop('all')" class="shop-tab-btn px-2.5 py-1 rounded-lg bg-white shadow-sm text-[#C97B5A]" data-cat="all">전체</button>
+            <button onclick="filterShop('furniture')" class="shop-tab-btn px-2.5 py-1 rounded-lg text-stone-500" data-cat="furniture">🛋️ 가구</button>
+            <button onclick="filterShop('props')" class="shop-tab-btn px-2.5 py-1 rounded-lg text-stone-500" data-cat="props">🪴 소품</button>
+            <button onclick="filterShop('wallpaper')" class="shop-tab-btn px-2.5 py-1 rounded-lg text-stone-500" data-cat="wallpaper">🧱 벽지/바닥</button>
+            <button onclick="filterShop('special')" class="shop-tab-btn px-2.5 py-1 rounded-lg text-stone-500" data-cat="special">⭐️ 스페셜</button>
+          </div>
+        </div>
+
+        <!-- 가구 쇼핑 그리드 리스트 -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 overflow-y-auto max-h-[290px] pr-1" id="shop-items-grid">
+          <!-- JS에서 가구 아이템 동적 렌더링 -->
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- BOTTOM INFOGRAPHIC (마케팅 / 브랜드 소개 요약 레이아웃) -->
+  <footer class="mt-8 bg-[#F5EFE0]/50 border-t border-stone-200 py-8 px-4 text-stone-600">
+    <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 text-xs leading-relaxed">
+      <!-- 서비스 소개 -->
+      <div>
+        <h3 class="font-bold text-stone-800 mb-2 flex items-center gap-1.5 text-sm serif-title">
+          <span>ROOMTINE</span> 1.0 기획 개념
+        </h3>
+        <p class="text-stone-500 text-justify">
+          숫자로만 기록되던 기존 루틴 앱의 한계를 넘어, 아기자기한 방꾸미기 타이틀을 메인 보상으로 치환했습니다. 루틴이 흐트러지면 방에 먼지가 내려앉고, 루틴을 완료하면 아늑한 불빛이 다시 켜지는 감성 피드백을 통해 꾸준한 자기관리 습관 형성을 돕습니다.
+        </p>
+      </div>
+      <!-- 컬러 시스템 정보 -->
+      <div>
+        <h3 class="font-bold text-stone-800 mb-2 text-sm">브랜드 컬러 매뉴얼</h3>
+        <div class="grid grid-cols-2 gap-2 text-[11px]">
+          <div class="flex items-center space-x-1.5">
+            <span class="w-3 h-3 rounded bg-[#F5EFE0] border border-stone-300"></span>
+            <span>웜 아이보리 (#F5EFE0)</span>
+          </div>
+          <div class="flex items-center space-x-1.5">
+            <span class="w-3 h-3 rounded bg-[#8BAF8E]"></span>
+            <span>세이지 그린 (#8BAF8E)</span>
+          </div>
+          <div class="flex items-center space-x-1.5">
+            <span class="w-3 h-3 rounded bg-[#C97B5A]"></span>
+            <span>테라코타 (#C97B5A)</span>
+          </div>
+          <div class="flex items-center space-x-1.5">
+            <span class="w-3 h-3 rounded bg-[#B8A9C9]"></span>
+            <span>더스티 라벤더 (#B8A9C9)</span>
+          </div>
+        </div>
+        <p class="text-stone-400 mt-2 text-[10px]">
+          무인양품(MUJI)의 정돈된 아늑함과 동물의 숲이 주는 소박하고 따뜻한 톤앤매너를 지향합니다.
+        </p>
+      </div>
+      <!-- 소셜 플레이/체험용 가이드 링크 -->
+      <div>
+        <h3 class="font-bold text-stone-800 mb-2 text-sm flex items-center gap-1.5">
+          <span>👥 가벼운 소셜 방문하기</span>
+        </h3>
+        <div class="space-y-1.5">
+          <p class="text-stone-500">다른 룸타이너들의 완성된 테마방을 구경하며 따뜻한 하트를 보내주세요!</p>
+          <div class="flex gap-2 mt-1">
+            <button onclick="visitVirtualRoom('gaddae_p')" class="px-2 py-1 bg-stone-200 hover:bg-stone-300 rounded text-stone-700 font-semibold transition">
+              🏡 '갓생직장인'님 방 구경
+            </button>
+            <button onclick="visitVirtualRoom('sweet_home')" class="px-2 py-1 bg-stone-200 hover:bg-stone-300 rounded text-stone-700 font-semibold transition">
+              🎄 '미리크리스마스'님 방 구경
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="max-w-7xl mx-auto border-t border-stone-200/60 mt-6 pt-4 text-center text-stone-400 text-[10px]">
+      © 2026 ROOMTINE. ver 1.0 | 루틴 서비스 × 방꾸미기 게이미피케이션 플랫폼 기획 데모
+    </div>
+  </footer>
+
+  <!-- SNS CARD MODAL (저장/공유 팝업) -->
+  <div id="sns-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+    <div class="bg-white p-6 rounded-3xl max-w-sm w-full mx-4 shadow-2xl border border-stone-100 flex flex-col items-center">
+      <div class="flex justify-between w-full items-center mb-4">
+        <h3 class="text-sm font-bold text-stone-800">📸 인스타그램 공유 카드 제작 완료</h3>
+        <button onclick="closeModal()" class="text-stone-400 hover:text-stone-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <!-- SNS 이미지 시뮬레이터 -->
+      <div id="sns-card-preview" class="w-full aspect-square bg-gradient-to-tr from-[#F5EFE0] to-[#E9DCC4] p-5 rounded-2xl flex flex-col justify-between shadow-inner text-[#3D3530]">
+        <div class="flex justify-between items-center text-[10px] tracking-widest font-bold opacity-75 uppercase">
+          <span>My Routine Room</span>
+          <span id="sns-date-stamp">2026.06</span>
+        </div>
+
+        <div class="flex-1 flex flex-col items-center justify-center my-2 relative">
+          <!-- 가상의 소형 픽토그램 방 요약 표현 -->
+          <div class="text-6xl filter drop-shadow-md" id="sns-room-visual">🏠🛋️🪴</div>
+          <div class="mt-4 text-center bg-white/80 backdrop-blur px-3 py-1.5 rounded-full text-xs font-bold border border-white/20">
+            루틴 완료율 <span id="sns-completion">100%</span> 돌파!
+          </div>
+        </div>
+
+        <div class="flex justify-between items-center border-t border-[#3D3530]/10 pt-3">
+          <div class="flex items-center gap-2">
+            <span class="w-5 h-5 bg-[#C97B5A] rounded-md text-white flex items-center justify-center text-[9px] font-black">R</span>
+            <span class="serif-title text-xs font-bold tracking-tight">ROOMTINE</span>
+          </div>
+          <span class="text-[9px] font-semibold text-stone-500">#오늘의내방 #룸타인방꾸</span>
+        </div>
+      </div>
+
+      <p class="text-stone-500 text-[11px] text-center mt-4 leading-relaxed">
+        위 카드는 룸타인 앱 내 인스타그램 스토리/피드 연동 규격에 최적화된 공유 카드 포맷입니다. SNS 인증을 통한 리텐션 버즈를 형성합니다.
+      </p>
+
+      <button onclick="closeModal()" class="mt-4 w-full bg-[#C97B5A] text-white py-2.5 rounded-xl text-xs font-bold hover:bg-[#b5694a] transition">
+        확인하고 닫기
+      </button>
+    </div>
+  </div>
+
+  <!-- VIRTUAL VISIT MODAL (가상 방 구경 및 소셜 액션) -->
+  <div id="visit-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+    <div class="bg-[#FDFBF7] p-6 rounded-3xl max-w-md w-full mx-4 shadow-2xl border border-stone-200">
+      <div class="flex justify-between items-center mb-4">
+        <div class="flex items-center space-x-2">
+          <span class="text-xl">🏡</span>
+          <div>
+            <h3 class="text-sm font-bold text-stone-800" id="visit-owner-name">갓생직장인님의 미니룸</h3>
+            <p class="text-[10px] text-[#8BAF8E] font-semibold" id="visit-owner-status">🔥 14일 연속 완벽 유지 중인 방</p>
+          </div>
+        </div>
+        <button onclick="closeVisitModal()" class="text-stone-400 hover:text-stone-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <!-- 타인 방 스냅샷 프리뷰 (로파이 일러스트 느낌) -->
+      <div class="w-full h-56 rounded-2xl bg-gradient-to-br from-stone-100 to-stone-200 border border-stone-200 relative overflow-hidden flex items-center justify-center">
+        <!-- 시간 밤 표현 -->
+        <div id="visit-bg-light" class="absolute inset-0 bg-blue-950/20 mix-blend-multiply"></div>
+        <div class="absolute bottom-5 w-48 h-24 bg-stone-300/40 rounded-full blur-md" style="transform: rotateX(60deg);"></div>
+        
+        <!-- 배치 가구 가상 그래픽 세트 -->
+        <div class="absolute text-5xl" id="visit-furniture-group">🛌🪴📚🐱🕯️</div>
+        
+        <div class="absolute top-3 left-3 bg-white/90 backdrop-blur text-[10px] px-2 py-1 rounded-full font-bold shadow-sm">
+          방 주인의 가구: <span id="visit-item-count">5개</span>
+        </div>
+      </div>
+
+      <!-- 부담 없는 소셜 응원 인터랙션 -->
+      <div class="mt-4 bg-[#F5EFE0] p-3 rounded-xl flex justify-between items-center">
+        <span class="text-xs text-stone-600 font-medium">부담 없이 가볍게 응원의 마음을 남겨보세요.</span>
+        <button onclick="sendHeart()" id="heart-btn" class="px-3.5 py-1.5 bg-[#C97B5A] hover:bg-[#b5694a] text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5">
+          <i class="fa-solid fa-heart animate-pulse"></i> 하트 <span id="heart-count">12</span>
+        </button>
+      </div>
+
+      <p class="text-[10px] text-stone-400 mt-2 text-center">
+        💡 강압적인 공동 퀘스트가 없는 룸타인만의 가벼운 소셜 연결 방식입니다.
+      </p>
+
+      <button onclick="closeVisitModal()" class="mt-4 w-full bg-stone-800 text-white py-2.5 rounded-xl text-xs font-bold hover:bg-stone-700 transition">
+        내 방으로 돌아가기
+      </button>
+    </div>
+  </div>
+
+  <!-- JAVASCRIPT LOGIC -->
+  <script>
+    // 1. 초기 더미 데이터 및 상태값 세팅
+    let state = {
+      coins: 120,
+      streak: 3,
+      cleanliness: 100, // 0 to 100
+      currentTime: 'morning',
+      routines: [
+        { id: 1, title: '아침 따뜻한 물 한 잔 마시기', category: 'diet', period: '매일', icon: '🍎', completed: true },
+        { id: 2, title: '책상 정리 및 로파이 음악 틀기', category: 'mind', period: '매일', icon: '🧘', completed: false },
+        { id: 3, title: '가벼운 스트레칭 15분', category: 'exercise', period: '주 3회', icon: '🏃', completed: true },
+        { id: 4, title: '하루 30분 전공 서적 읽기', category: 'study', period: '평일', icon: '📚', completed: false },
+        { id: 5, title: '밤 11시 전 스마트폰 멀리하기', category: 'sleep', period: '매일', icon: '🌙', completed: false }
+      ],
+      placedItems: [
+        // 기본 배치 가구 (초기 튜토리얼용 배치)
+        { id: 'item_1', name: '우드 베이직 침대', emoji: '🛌', left: '48%', top: '35%', scale: 'text-5xl' },
+        { id: 'item_2', name: '아로마 캔들', emoji: '🕯️', left: '65%', top: '65%', scale: 'text-2xl' }
+      ]
+    };
+
+    // 2. 가구 소품샵 전체 마스터 리스트 (카테고리별 조건, 가격 포함)
+    const SHOP_ITEMS = [
+      { id: 'bed_wood', name: '우드 베이직 침대', emoji: '🛌', category: 'furniture', price: 0, unlocked: true, iconClass: 'text-5xl' },
+      { id: 'desk_study', name: '학습용 오크 책상', emoji: '💻', category: 'furniture', price: 40, unlocked: true, iconClass: 'text-4xl' },
+      { id: 'cozy_sofa', name: '코지 오렌지 패브릭 소파', emoji: '🛋️', category: 'furniture', price: 80, unlocked: false, lockReason: '누적 달성 5회 돌파 시 해제', iconClass: 'text-5xl' },
+      { id: 'vintage_bookshelf', name: '빈티지 아카시아 책장', emoji: '📚', category: 'furniture', price: 100, unlocked: false, lockReason: '공부 루틴 완료 누적 10회', iconClass: 'text-4xl' },
+      
+      { id: 'plant_monstera', name: '몬스테라 화분', emoji: '🪴', category: 'props', price: 15, unlocked: true, iconClass: 'text-3xl' },
+      { id: 'aroma_candle', name: '라벤더 아로마 캔들', emoji: '🕯️', category: 'props', price: 10, unlocked: true, iconClass: 'text-2xl' },
+      { id: 'cute_bear', name: '복실복실 곰인형', emoji: '🧸', category: 'props', price: 30, unlocked: false, lockReason: '식습관 루틴 5회', iconClass: 'text-3xl' },
+      { id: 'frame_sun', name: '선셋 무드 포스터', emoji: '🖼️', category: 'props', price: 20, unlocked: true, iconClass: 'text-3xl' },
+      { id: 'gold_dumbbell', name: '황금 홈트 아령', emoji: '🏋️', category: 'props', price: 50, unlocked: false, lockReason: '운동 카테고리 3회 완료시', iconClass: 'text-3xl' },
+      
+      { id: 'floor_wood', name: '클래식 헤링본 우드 타일', emoji: '🪵', category: 'wallpaper', price: 10, unlocked: true, iconClass: 'text-4xl' },
+      { id: 'carpet_cozy', name: '몽글몽글 베이지 러그', emoji: '🪡', category: 'wallpaper', price: 30, unlocked: true, iconClass: 'text-4xl' },
+      { id: 'brick_wall', name: '화이트 브릭 아트월', emoji: '🧱', category: 'wallpaper', price: 50, unlocked: false, lockReason: '7일 연속 달성 기록 필요', iconClass: 'text-4xl' },
+
+      { id: 'special_tree', name: '로맨틱 일루미네이션 트리', emoji: '🎄', category: 'special', price: 150, unlocked: false, lockReason: '구독 Pro 전용 가구', iconClass: 'text-5xl' },
+      { id: 'special_kitty', name: '방안의 낮잠 자는 치즈 고양이', emoji: '🐱', category: 'special', price: 120, unlocked: false, lockReason: '코인으로 스페셜 분양 가능', iconClass: 'text-4xl' }
+    ];
+
+    // 현재 상점 필터링 상태
+    let currentShopFilter = 'all';
+
+    // 3. 앱 로드 시 실시간 업데이트
+    window.onload = function() {
+      renderRoutines();
+      renderPlacedItems();
+      renderShopItems();
+      updateCleanliness();
+      updateUI();
+    };
+
+    // 4. 전반적인 상단 헤더 및 기본 스펙 UI 동기화
+    function updateUI() {
+      document.getElementById('coin-count').innerText = state.coins;
+      document.getElementById('streak-count').innerText = `${state.streak}일 연속`;
+      document.getElementById('item-count-badge').innerText = `가구 ${state.placedItems.length}개 설치됨`;
+    }
+
+    // 5. 청결도 시스템 업데이트 (루틴 완료율에 따라 방 상태 시각화 피드백)
+    function updateCleanliness() {
+      const completedCount = state.routines.filter(r => r.completed).length;
+      const totalCount = state.routines.length;
+      const percent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 100;
+      state.cleanliness = percent;
+
+      // 청결도 정보 UI 바인딩
+      const iconEl = document.getElementById('room-cleanliness-icon');
+      const textEl = document.getElementById('room-cleanliness-txt');
+      const progressEl = document.getElementById('routine-progress-bar');
+      const progressText = document.getElementById('progress-text');
+      const alertEl = document.getElementById('cleanliness-status-alert');
+
+      progressEl.style.width = `${percent}%`;
+      progressText.innerText = `완료율 ${percent}%`;
+
+      if (percent === 100) {
+        iconEl.innerText = '✨';
+        textEl.className = 'text-emerald-600 font-bold';
+        textEl.innerText = '쾌적함 (100%)';
+        alertEl.innerHTML = `<i class="fa-solid fa-circle-check"></i> 방이 오늘 완벽하게 정리되었습니다!`;
+        alertEl.className = "flex items-center gap-1 text-emerald-600 font-semibold";
+        // 먼지 오버레이 감춤
+        document.getElementById('room-mess-dust').style.opacity = '0';
+        document.getElementById('messy-assets').style.opacity = '0';
+      } else if (percent >= 60) {
+        iconEl.innerText = '🧹';
+        textEl.className = 'text-blue-500 font-bold';
+        textEl.innerText = '양호함';
+        alertEl.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> 조금만 더 루틴을 깨워볼까요?`;
+        alertEl.className = "flex items-center gap-1 text-blue-500 font-semibold";
+        document.getElementById('room-mess-dust').style.opacity = '0.2';
+        document.getElementById('messy-assets').style.opacity = '0.2';
+      } else if (percent >= 30) {
+        iconEl.innerText = '💨';
+        textEl.className = 'text-amber-500 font-bold';
+        textEl.innerText = '정돈 필요';
+        alertEl.innerHTML = `<i class="fa-solid fa-wind"></i> 가구들이 아주 살짝 어질러져 보여요.`;
+        alertEl.className = "flex items-center gap-1 text-amber-500 font-semibold";
+        document.getElementById('room-mess-dust').style.opacity = '0.5';
+        document.getElementById('messy-assets').style.opacity = '0.6';
+      } else {
+        iconEl.innerText = '🕸️';
+        textEl.className = 'text-red-500 font-bold';
+        textEl.innerText = '어질러짐';
+        alertEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> 루틴 방치 시 방안이 더 흐트러집니다!`;
+        alertEl.className = "flex items-center gap-1 text-red-500 font-semibold animate-pulse";
+        document.getElementById('room-mess-dust').style.opacity = '0.8';
+        document.getElementById('messy-assets').style.opacity = '1';
+      }
+
+      // 브랜드 보이스 연동 반응형 멘트 제공
+      updateBrandVoice(percent);
+    }
+
+    // 브랜드 보이스 텍스트 추천 
+    function updateBrandVoice(percent) {
+      const voiceBox = document.getElementById('brand-voice-box');
+      if (percent === 100) {
+        voiceBox.innerText = `"오늘도 완벽하게 잘해냈어요! 깨끗하고 빛나는 나만의 아늑한 룸에서 차분한 여유를 즐겨보세요."`;
+      } else if (percent >= 50) {
+        voiceBox.innerText = `"방이 한결 단정해 보이고 있네요. 남은 루틴들도 가볍게 한 개만 마저 클리어해 보아요."`;
+      } else {
+        voiceBox.innerText = `"방이 조금 당신의 손길을 기다리는 중입니다. 아기자기하게 채워둔 나만의 공간을 위해 하나만 켜보세요."`;
+      }
+    }
+
+    // 6. 루틴 렌더러
+    function renderRoutines() {
+      const container = document.getElementById('routine-list-container');
+      container.innerHTML = '';
+
+      state.routines.forEach(r => {
+        const card = document.createElement('div');
+        // 루틴 완료 여부에 따른 스타일
+        const completedStyle = r.completed 
+          ? 'border-emerald-200 bg-emerald-50/50 text-stone-500' 
+          : 'border-stone-100 bg-stone-50 text-stone-700 hover:border-stone-200';
+        
+        card.className = `flex justify-between items-center p-3.5 rounded-xl border transition ${completedStyle}`;
+        
+        card.innerHTML = `
+          <div class="flex items-center space-x-3">
+            <!-- 카테고리 기호 아바타 -->
+            <span class="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-sm shadow-sm border border-stone-200">${r.icon}</span>
+            <div>
+              <span class="text-xs text-stone-400 font-bold tracking-tight block">${r.category.toUpperCase()} • ${r.period}</span>
+              <p class="text-xs font-semibold ${r.completed ? 'line-through text-stone-400' : ''}">${r.title}</p>
+            </div>
+          </div>
+          
+          <div class="flex items-center space-x-2">
+            <!-- 체크 토글 완료 버튼 -->
+            <button onclick="toggleRoutine(${r.id})" class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition ${
+              r.completed 
+                ? 'bg-[#8BAF8E] text-white' 
+                : 'bg-white border border-stone-300 text-stone-400 hover:border-[#8BAF8E] hover:text-[#8BAF8E]'
+            }">
+              <i class="fa-solid fa-check"></i>
+            </button>
+            
+            <!-- 삭제 버튼 -->
+            <button onclick="deleteRoutine(${r.id})" class="text-stone-300 hover:text-red-400 p-1.5 transition">
+              <i class="fa-solid fa-trash-can text-[10px]"></i>
+            </button>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    // 루틴 완료 토글 액션 (코지 코인 보상 및 가구 락 해제 이벤트 연동)
+    function toggleRoutine(id) {
+      const target = state.routines.find(r => r.id === id);
+      if (target) {
+        target.completed = !target.completed;
+        
+        // 만약 완료 상태로 변경되었다면 코인 보상 처리
+        if (target.completed) {
+          state.coins += 10;
+          // 이펙트 효과 부여
+          showBonusSparkle();
+          
+          // 가구 잠금 해제 체크 (예: 특정 루틴 달성에 다른 가구 해제)
+          checkUnlocks();
+        } else {
+          state.coins = Math.max(0, state.coins - 10);
+        }
+
+        renderRoutines();
+        updateCleanliness();
+        updateUI();
+      }
+    }
+
+    // 반짝이는 별가루 이펙트 애니메이션 생성 헬퍼
+    function showBonusSparkle() {
+      const room = document.getElementById('room-canvas');
+      const sparkle = document.createElement('div');
+      sparkle.className = 'absolute z-50 text-2xl sparkle-effect pointer-events-none text-yellow-400';
+      sparkle.innerText = '✨ +10 Coin';
+      sparkle.style.left = '50%';
+      sparkle.style.top = '40%';
+      room.appendChild(sparkle);
+      
+      setTimeout(() => {
+        sparkle.remove();
+      }, 800);
+    }
+
+    // 특정 이벤트로 인한 가구점 잠금 해제 조건 모니터링
+    function checkUnlocks() {
+      const exerciseCompleted = state.routines.filter(r => r.category === 'exercise' && r.completed).length;
+      const studyCompleted = state.routines.filter(r => r.category === 'study' && r.completed).length;
+      
+      // 아령 가구 락 풀기
+      if (exerciseCompleted >= 1) {
+        const item = SHOP_ITEMS.find(i => i.id === 'gold_dumbbell');
+        if (item && !item.unlocked) {
+          item.unlocked = true;
+          triggerNotification("🏃 운동 루틴 덕분에 '황금 홈트 아령' 가구 잠금이 해제되었습니다!");
+          renderShopItems();
+        }
+      }
+
+      // 인형 가구 락 풀기
+      if (state.streak >= 4) {
+        const item = SHOP_ITEMS.find(i => i.id === 'cute_bear');
+        if (item && !item.unlocked) {
+          item.unlocked = true;
+          triggerNotification("🔥 4일 연속 루틴 달성으로 '복실복실 곰인형' 가구 잠금 해제!");
+          renderShopItems();
+        }
+      }
+
+      // 벽지 락 풀기
+      if (state.streak >= 5) {
+        const item = SHOP_ITEMS.find(i => i.id === 'brick_wall');
+        if (item && !item.unlocked) {
+          item.unlocked = true;
+          triggerNotification("🧱 완벽한 연속 달성 보상으로 '화이트 브릭 아트월' 벽지가 잠금 해제되었습니다.");
+          renderShopItems();
+        }
+      }
+    }
+
+    // 가상의 알림 팝업 토스트 기능
+    function triggerNotification(msg) {
+      const alertDiv = document.createElement('div');
+      alertDiv.className = 'fixed top-20 right-4 bg-stone-900 text-white text-xs px-4 py-3 rounded-xl shadow-lg z-50 flex items-center space-x-2 border border-stone-800 transition duration-300';
+      alertDiv.innerHTML = `<span>🎉</span> <span class="font-bold">${msg}</span>`;
+      document.body.appendChild(alertDiv);
+      setTimeout(() => {
+        alertDiv.style.opacity = '0';
+        setTimeout(() => alertDiv.remove(), 500);
+      }, 3000);
+    }
+
+    // 루틴 삭제
+    function deleteRoutine(id) {
+      state.routines = state.routines.filter(r => r.id !== id);
+      renderRoutines();
+      updateCleanliness();
+      updateUI();
+    }
+
+    // 루틴 추가 submit
+    document.getElementById('routine-form').onsubmit = function(e) {
+      e.preventDefault();
+      const titleInput = document.getElementById('routine-title');
+      const catSelect = document.getElementById('routine-category');
+      const periodSelect = document.getElementById('routine-period');
+
+      const selectedOption = catSelect.options[catSelect.selectedIndex];
+      const emojiIcon = selectedOption.getAttribute('data-icon') || '📝';
+
+      const newRoutine = {
+        id: Date.now(),
+        title: titleInput.value,
+        category: catSelect.value,
+        period: periodSelect.value,
+        icon: emojiIcon,
+        completed: false
+      };
+
+      state.routines.push(newRoutine);
+      titleInput.value = '';
+
+      renderRoutines();
+      updateCleanliness();
+      updateUI();
+      
+      triggerNotification("오늘의 루틴이 심겼습니다. 수행하고 방에 인테리어 소품을 더해보세요!");
+    };
+
+    // 루틴 전체 초기화
+    function resetAllRoutines() {
+      state.routines.forEach(r => r.completed = false);
+      renderRoutines();
+      updateCleanliness();
+      updateUI();
+    }
+
+
+    // 7. 룸 배치 아이템(Placed Furniture) 렌더러 및 위치 이동 로직
+    function renderPlacedItems() {
+      const container = document.getElementById('placed-items-container');
+      container.innerHTML = '';
+
+      state.placedItems.forEach(item => {
+        const itemEl = document.createElement('div');
+        itemEl.className = `placed-item ${item.scale} transition-all duration-100 ease-out select-none`;
+        itemEl.style.left = item.left;
+        itemEl.style.top = item.top;
+        itemEl.id = item.id;
+        itemEl.innerHTML = `
+          <div class="relative group">
+            <span class="block hover:scale-110 active:scale-95 duration-200" title="${item.name}">${item.emoji}</span>
+            <!-- 아이템 제거 전용 작은 X 버튼 -->
+            <button onclick="removePlacedItem('${item.id}', event)" class="absolute -top-3 -right-3 w-5 h-5 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow">
+              ✕
+            </button>
+          </div>
+        `;
+
+        // 마우스 및 터치 드래그 앤 드롭 구현
+        setupDragElement(itemEl, item);
+        container.appendChild(itemEl);
+      });
+    }
+
+    // 드래그 앤 드롭 정밀 핸들러 (반응형 캔버스 지원)
+    function setupDragElement(elmnt, itemObj) {
+      let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+      
+      elmnt.onmousedown = dragMouseDown;
+      elmnt.ontouchstart = dragTouchStart;
+
+      function dragMouseDown(e) {
+        e = e || window.event;
+        e.preventDefault();
+        // 마우스 시작 좌표 획득
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        document.onmouseup = closeDragElement;
+        document.onmousemove = elementDrag;
+        
+        // 튜토리얼 텍스트 숨기기
+        const tut = document.getElementById('tutorial-bubble');
+        if (tut) tut.style.opacity = '0';
+      }
+
+      function dragTouchStart(e) {
+        if(e.touches.length === 1) {
+          pos3 = e.touches[0].clientX;
+          pos4 = e.touches[0].clientY;
+          document.ontouchend = closeDragElement;
+          document.ontouchmove = elementTouchDrag;
+        }
+        
+        const tut = document.getElementById('tutorial-bubble');
+        if (tut) tut.style.opacity = '0';
+      }
+
+      function elementDrag(e) {
+        e = e || window.event;
+        e.preventDefault();
+        // 변화량 계산
+        pos1 = pos3 - e.clientX;
+        pos2 = pos4 - e.clientY;
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        
+        moveElement(pos1, pos2);
+      }
+
+      function elementTouchDrag(e) {
+        if(e.touches.length === 1) {
+          pos1 = pos3 - e.touches[0].clientX;
+          pos2 = pos4 - e.touches[0].clientY;
+          pos3 = e.touches[0].clientX;
+          pos4 = e.touches[0].clientY;
+          
+          moveElement(pos1, pos2);
+        }
+      }
+
+      function moveElement(p1, p2) {
+        const parent = document.getElementById('room-canvas');
+        const pWidth = parent.clientWidth;
+        const pHeight = parent.clientHeight;
+
+        let newLeftPx = elmnt.offsetLeft - p1;
+        let newTopPx = elmnt.offsetTop - p2;
+
+        // 경계 제한 (방 밖으로 사라지지 않도록 보호)
+        newLeftPx = Math.max(20, Math.min(newLeftPx, pWidth - 20));
+        newTopPx = Math.max(20, Math.min(newTopPx, pHeight - 20));
+
+        // 퍼센트 좌표로 반환하여 완벽한 반응형 캔버스 유지
+        const leftPercent = `${((newLeftPx / pWidth) * 100).toFixed(2)}%`;
+        const topPercent = `${((newTopPx / pHeight) * 100).toFixed(2)}%`;
+
+        elmnt.style.left = leftPercent;
+        elmnt.style.top = topPercent;
+
+        // 실제 상태 값 저장
+        itemObj.left = leftPercent;
+        itemObj.top = topPercent;
+      }
+
+      function closeDragElement() {
+        document.onmouseup = null;
+        document.onmousemove = null;
+        document.ontouchend = null;
+        document.ontouchmove = null;
+      }
+    }
+
+    // 설치된 방 소품 제거 액션
+    function removePlacedItem(id, event) {
+      if(event) event.stopPropagation();
+      state.placedItems = state.placedItems.filter(item => item.id !== id);
+      renderPlacedItems();
+      updateUI();
+    }
+
+
+    // 8. 코지 가구 소품샵 렌더러 및 구매 로직
+    function renderShopItems() {
+      const grid = document.getElementById('shop-items-grid');
+      grid.innerHTML = '';
+
+      // 필터 적용
+      const filtered = SHOP_ITEMS.filter(item => {
+        if (currentShopFilter === 'all') return true;
+        return item.category === currentShopFilter;
+      });
+
+      filtered.forEach(item => {
+        const card = document.createElement('div');
+        card.className = `p-3 rounded-2xl border transition-all flex flex-col justify-between ${
+          item.unlocked 
+            ? 'bg-white border-stone-200 hover:shadow-md hover:-translate-y-0.5' 
+            : 'bg-stone-100 border-stone-200 opacity-75'
+        }`;
+
+        // 구매 영역 구성
+        let actionBtn = '';
+        if (item.unlocked) {
+          actionBtn = `
+            <button onclick="buyAndPlace('${item.id}')" class="w-full mt-2.5 bg-[#C97B5A] hover:bg-[#b5694a] text-white py-1.5 rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1">
+              <span>👛</span> 획득 & 배치
+            </button>
+          `;
+        } else {
+          actionBtn = `
+            <div class="mt-2.5 text-[10px] text-stone-400 bg-stone-200/50 p-1 rounded text-center font-semibold leading-tight">
+              🔒 ${item.lockReason}
+            </div>
+          `;
+        }
+
+        card.innerHTML = `
+          <div class="flex flex-col items-center text-center">
+            <!-- 가구 아이콘 프리뷰 -->
+            <span class="text-4xl my-2 select-none">${item.emoji}</span>
+            <span class="text-[10px] font-bold text-stone-400 uppercase tracking-widest">${item.category}</span>
+            <h4 class="text-xs font-bold text-stone-700 truncate w-full px-1">${item.name}</h4>
+          </div>
+
+          <div>
+            <!-- 가격 태그 -->
+            <div class="flex justify-between items-center mt-2 px-1 text-[11px]">
+              <span class="text-stone-400 font-medium">코지코인</span>
+              <span class="font-bold text-stone-800 flex items-center gap-0.5">
+                <i class="fa-solid fa-coins text-amber-500 text-[9px]"></i> ${item.price}
+              </span>
+            </div>
+            ${actionBtn}
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    // 가구 구매 후 방 정중앙에 기본 배치시키기
+    function buyAndPlace(itemId) {
+      const target = SHOP_ITEMS.find(i => i.id === itemId);
+      if (target) {
+        if (state.coins >= target.price) {
+          // 돈 차감
+          state.coins -= target.price;
+          
+          // 방 꾸미기 배열에 새 아이템 추가
+          const newItem = {
+            id: 'placed_' + Date.now(),
+            name: target.name,
+            emoji: target.emoji,
+            left: '50%',
+            top: '55%',
+            scale: target.iconClass || 'text-4xl'
+          };
+
+          state.placedItems.push(newItem);
+          
+          triggerNotification(`🎉 '${target.name}'을(를) 방 중앙에 배치했습니다! 드래그하여 꾸며주세요.`);
+          
+          renderPlacedItems();
+          updateUI();
+        } else {
+          // 돈 부족 경고 메시지 모달 대체 토스트
+          triggerNotification("🪙 코지코인이 부족합니다! 오늘의 루틴을 더 달성하여 획득해 보세요.");
+        }
+      }
+    }
+
+    // 쇼핑 카테고리 필터 변경
+    function filterShop(category) {
+      currentShopFilter = category;
+      
+      // 탭 디자인 토글
+      const tabs = document.querySelectorAll('.shop-tab-btn');
+      tabs.forEach(btn => {
+        const cat = btn.getAttribute('data-cat');
+        if (cat === category) {
+          btn.className = 'shop-tab-btn px-2.5 py-1 rounded-lg bg-white shadow-sm text-[#C97B5A]';
+        } else {
+          btn.className = 'shop-tab-btn px-2.5 py-1 rounded-lg text-stone-500';
+        }
+      });
+
+      renderShopItems();
+    }
+
+
+    // 9. 방 시간대 변경 (조명 조절용 피드백)
+    function changeTime(time) {
+      state.currentTime = time;
+      const canvas = document.getElementById('room-canvas');
+      
+      // 클래스 초기화 후 세팅
+      canvas.className = `room-canvas ${time} w-full h-[380px] rounded-xl flex items-center justify-center relative select-none`;
+
+      // 버튼 디자인 동기화
+      const buttons = document.querySelectorAll('.time-btn');
+      buttons.forEach(btn => {
+        const t = btn.getAttribute('data-time');
+        if (t === time) {
+          btn.className = 'time-btn px-2 py-1 rounded text-[#C97B5A] bg-white shadow-sm font-bold';
+        } else {
+          btn.className = 'time-btn px-2 py-1 rounded text-stone-500';
+        }
+      });
+    }
+
+    // 방 비우기
+    function clearRoom() {
+      state.placedItems = [];
+      renderPlacedItems();
+      updateUI();
+      triggerNotification("🧹 방안의 모든 소품을 임시 보관함으로 비웠습니다.");
+    }
+
+
+    // 10. SNS 저장 모달 창 열기
+    function captureRoom() {
+      const modal = document.getElementById('sns-modal');
+      modal.classList.remove('hidden');
+
+      // 스냅샷 정보 연동
+      const count = state.placedItems.length;
+      let visualText = '🏠';
+      if (count > 0) {
+        visualText = state.placedItems.slice(0, 3).map(i => i.emoji).join(' ');
+      }
+      document.getElementById('sns-room-visual').innerText = visualText;
+      document.getElementById('sns-completion').innerText = `${state.cleanliness}%`;
+
+      const now = new Date();
+      document.getElementById('sns-date-stamp').innerText = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}`;
+    }
+
+    function closeModal() {
+      document.getElementById('sns-modal').classList.add('hidden');
+    }
+
+
+    // 11. 가상 소셜 방 방문 시뮬레이터
+    function visitVirtualRoom(ownerKey) {
+      const modal = document.getElementById('visit-modal');
+      const ownerName = document.getElementById('visit-owner-name');
+      const ownerStatus = document.getElementById('visit-owner-status');
+      const furnitures = document.getElementById('visit-furniture-group');
+      const itemCount = document.getElementById('visit-item-count');
+      const heartCount = document.getElementById('heart-count');
+      const heartBtn = document.getElementById('heart-btn');
+
+      // 하트 리셋 및 설정
+      heartBtn.className = "px-3.5 py-1.5 bg-[#C97B5A] hover:bg-[#b5694a] text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5";
+      heartBtn.disabled = false;
+
+      if (ownerKey === 'gaddae_p') {
+        ownerName.innerText = "갓생살이 직장인님의 룸";
+        ownerStatus.innerText = "🔥 14일 연속 완벽 유지 중인 평화로운 방";
+        furnitures.innerText = "🛌 💻 🪴 🛋️ 🖼️ 🐈";
+        itemCount.innerText = "6개";
+        heartCount.innerText = "24";
+      } else {
+        ownerName.innerText = "미리크리스마스님의 겨울 테마 룸";
+        ownerStatus.innerText = "❄️ 한정 스페셜 가구를 가득 품은 크리스마스 방";
+        furnitures.innerText = "🎄 🛌 🧸 🕯️ 🎁 🍷";
+        itemCount.innerText = "6개";
+        heartCount.innerText = "57";
+      }
+
+      modal.classList.remove('hidden');
+    }
+
+    function closeVisitModal() {
+      document.getElementById('visit-modal').classList.add('hidden');
+    }
+
+    function sendHeart() {
+      const heartCountEl = document.getElementById('heart-count');
+      let currentVal = parseInt(heartCountEl.innerText);
+      heartCountEl.innerText = currentVal + 1;
+
+      const heartBtn = document.getElementById('heart-btn');
+      heartBtn.className = "px-3.5 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-default";
+      heartBtn.disabled = true;
+      heartBtn.innerHTML = `<i class="fa-solid fa-check"></i> 전달 완료!`;
+
+      triggerNotification("💖 응원의 마음(하트)을 안전하게 전달했습니다!");
+    }
+  </script>
+</body>
+</html>
